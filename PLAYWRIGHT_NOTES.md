@@ -141,5 +141,115 @@ with sync_playwright() as p:
 - actions are executed on the page
 - cleanup closes page, context, and browser
 
+## Playwright vs Selenium Architecture
+
+Architecturally, Playwright is more modern, tightly integrated, and isolation-first, while Selenium is more protocol-driven, distributed, and browser-driver based.
+
+### High-Level Difference
+
+#### Playwright
+- Test code talks to the Playwright library
+- Playwright directly manages browser automation through its own integration layer
+- Uses browser contexts as lightweight isolated sessions
+- Has built-in auto-waiting, tracing, network interception, and multi-tab/session control
+
+#### Selenium
+- Test code talks to WebDriver client bindings
+- Commands go through the WebDriver protocol
+- A separate browser driver is usually involved, such as ChromeDriver, GeckoDriver, or EdgeDriver
+- Browser isolation is usually done with separate browser sessions, which are heavier than Playwright contexts
+
+### Communication Model
+
+#### Playwright
+Flow:
+- Test Code
+- Playwright API
+- Browser Engine
+
+Playwright has a more direct automation model and tighter control over the browser.
+
+#### Selenium
+Flow:
+- Test Code
+- Selenium Client
+- WebDriver Protocol
+- Browser Driver
+- Browser
+
+There are more layers involved in Selenium execution.
+
+### Browser Driver Dependency
+
+#### Playwright
+- No traditional separate driver management
+- Browsers are bundled or managed by Playwright tooling
+- Less setup friction
+
+#### Selenium
+- Typically depends on browser-specific drivers
+- Version compatibility between browser and driver matters
+- Usually has more setup and maintenance overhead
+
+### Session Isolation Model
+
+#### Playwright
+- One browser can create many contexts
+- One context can create many pages
+- Contexts are lightweight and isolated
+- Cookies, storage, and sessions are separated per context
+
+#### Selenium
+- Isolation is usually one WebDriver session per browser instance
+- New sessions are heavier compared to Playwright contexts
+
+### Waiting Model
+
+#### Playwright
+- Built-in auto-waiting is part of the architecture
+- Checks visibility, stability, enabled state, and event readiness before actions
+
+#### Selenium
+- Usually relies more on implicit waits, explicit waits, and fluent waits
+- Often requires additional manual wait logic
+
+### Network and Modern Web Testing
+
+#### Playwright
+- Built-in support for request interception
+- Response mocking
+- API testing
+- Tracing, screenshots, and videos
+
+#### Selenium
+- Some capabilities require external tools or extra integrations
+- Historically less built-in support for modern network control
+
+### Execution Model
+
+#### Playwright
+- Built with modern parallel execution in mind
+- Lightweight isolation using contexts
+- Built-in test runner and debugging capabilities
+
+#### Selenium
+- Commonly combined with external tools such as TestNG, JUnit, pytest, NUnit, or Selenium Grid
+- More flexible, but often requires more assembly
+
+### Quick Comparison Table
+
+| Aspect | Playwright | Selenium |
+|---|---|---|
+| Communication | Direct Playwright automation layer | WebDriver protocol |
+| Driver dependency | No traditional separate driver management | Uses browser drivers |
+| Isolation | Browser contexts | Separate WebDriver sessions |
+| Waiting | Built-in auto-waiting | Mostly explicit or implicit waits |
+| Network mocking | Built-in | More limited or needs extra setup |
+| Tooling | Integrated | Ecosystem-based |
+| Parallel testing | Lightweight and efficient | Heavier session model |
+
+### Summary
+Playwright is designed as a modern automation framework with direct browser control, lightweight isolation, and many built-in testing features. Selenium is built around the WebDriver standard and browser drivers, making it highly flexible and widely supported, but often requiring more setup and more manual handling.
+
 ## Update Process
 This file will be updated incrementally with additional Playwright details over time.
