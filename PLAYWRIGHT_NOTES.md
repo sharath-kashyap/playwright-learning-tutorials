@@ -664,6 +664,134 @@ pytest tests -n 4 -v --tb=short --maxfail=2 -m smoke
 #### Ready-to-Say Answer
 Pytest options can be configured in `pytest.ini`, `pyproject.toml`, or directly on the command line. I usually keep shared defaults in a config file and use command-line arguments for temporary overrides.
 
+### Measuring Test Time and Bottlenecks
+
+To understand where time is being spent during a test run, I split timing into multiple layers instead of relying on a single duration value.
+
+#### 1. Total pytest timing
+Use pytest hooks to measure:
+- setup time
+- call/test body time
+- teardown time
+- total test duration
+
+This tells you how long the full test lifecycle took.
+
+#### 2. Playwright timing
+Measure Playwright-specific actions such as:
+- browser launch
+- context creation
+- page creation
+- page navigation
+- locator waits
+
+This helps separate framework overhead from application behavior.
+
+#### 3. Network timing
+Measure request and response durations for API calls and page resources.
+
+This helps identify whether the delay came from:
+- backend/API slowness
+- asset loading
+- network latency
+- third-party services
+
+#### Example timing summary
+```text
+Test: test_dashboard
+- setup: 120 ms
+- browser/context/page startup: 300 ms
+- page.goto(): 2400 ms
+- network: 1800 ms
+- assertions: 400 ms
+- teardown: 90 ms
+- total: 4310 ms
+```
+
+#### How to interpret the result
+- Slow browser or context creation usually points to infrastructure issues
+- Slow `page.goto()` usually points to network or backend latency
+- Slow waits after page load usually point to application rendering or selector issues
+- Slow runs only in CI usually point to environment or resource constraints
+
+#### Production-Like Timing Reports
+For better diagnostics, timing results can be exported in multiple formats instead of only being printed once during the test run.
+
+##### 1. JSON output
+JSON is useful when you want to store timing data for later analysis or send it to another system.
+
+Example:
+```json
+{
+  "test_dashboard": {
+    "setup_ms": 120.44,
+    "call_ms": 4321.88,
+    "teardown_ms": 91.50,
+    "context_create_ms": 88.22,
+    "page_create_ms": 17.90,
+    "page_goto_ms": 2404.30,
+    "network_timings": [
+      {
+        "url": "https://example.com/api/user",
+        "status": 200,
+        "duration_ms": 180.4
+      }
+    ]
+  }
+}
+```
+
+##### 2. CSV export
+CSV is helpful when you want to open timing data in Excel, Google Sheets, or a BI tool.
+
+Example:
+```csv
+test_name,setup_ms,call_ms,teardown_ms,context_create_ms,page_create_ms,page_goto_ms,total_ms
+test_dashboard,120.44,4321.88,91.50,88.22,17.90,2404.30,4533.82
+```
+
+##### 3. Terminal summary table
+A terminal summary gives a quick human-readable view at the end of the run.
+
+Example:
+```text
+Timing Summary
+==================================================
+test_dashboard
+  setup_ms: 120.44
+  call_ms: 4321.88
+  teardown_ms: 91.50
+  context_create_ms: 88.22
+  page_create_ms: 17.90
+  page_goto_ms: 2404.30
+  total_ms: 4533.82
+```
+
+##### Recommended approach
+- Use terminal summary for quick debugging
+- Use JSON for programmatic storage
+- Use CSV for reporting and analysis
+
+#### Metrics commonly captured in UI tests
+UI tests can capture many different kinds of metrics beyond network events.
+
+| Metric category | Examples | Why it matters |
+|---|---|---|
+| Test execution | total duration, setup time, call time, teardown time | Shows overall test cost and lifecycle overhead |
+| Browser startup | browser launch, context creation, page creation | Helps detect infrastructure or environment slowness |
+| Navigation | `page.goto()` duration, load events, redirects | Separates app/network latency from test logic |
+| Network | request count, response time, status codes, failed requests | Helps identify slow APIs and network issues |
+| UI actions | click, fill, hover, drag-and-drop duration | Shows how long interactions take in the browser |
+| Locator waits | visible/attached/enabled wait time, retries | Helps detect slow rendering and flaky selectors |
+| Assertions | assertion duration, retry count | Shows whether the app is slow to stabilize |
+| JS/runtime | console errors, page errors, long tasks | Useful for frontend runtime issues |
+| Visual/rendering | screenshot time, layout shifts, animation delays | Helps with rendering and UI performance issues |
+| Artifacts | trace time, video time, HAR size | Helps balance debugging with test cost |
+| Infra/environment | CPU, memory, disk I/O, CI queue time | Useful for diagnosing CI or machine constraints |
+
+#### Ready-to-Say Answer
+To diagnose test performance, I measure timing in layers: pytest timing for setup/call/teardown, Playwright timing for browser and page actions, and network timing for API and resource latency. That lets me tell whether the slowdown came from infrastructure, the app, or the network.
+
 ### Playwright + pytest-xdist Example `conftest.py`
 ```python
 import pytest
