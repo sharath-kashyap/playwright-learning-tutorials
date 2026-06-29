@@ -273,6 +273,63 @@ Avoid logging in through the UI in every test. Login once, save the authenticate
 - create a new context per test using that saved auth state
 - create a new page from that context
 
+### Storage State Details
+`context.storage_state()` returns a JSON snapshot of the browser context's authenticated state. It typically includes:
+- cookies
+- localStorage entries grouped by origin
+
+### Example Storage State JSON
+```json
+{
+  "cookies": [
+    {
+      "name": "sessionid",
+      "value": "7f3a9c2d4b1e8a90",
+      "domain": "app.example.com",
+      "path": "/",
+      "expires": 1760000000,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "csrf_token",
+      "value": "b8c1f4e2a7",
+      "domain": "app.example.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Strict"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "https://app.example.com",
+      "localStorage": [
+        {
+          "name": "authToken",
+          "value": "eyJhbGciOi..."
+        },
+        {
+          "name": "theme",
+          "value": "dark"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### What this means
+- `cookies` stores session/auth cookies and other browser cookies
+- `origins` stores localStorage values for each origin
+- This file can be reused later with:
+
+```python
+browser.new_context(storage_state="user.json")
+```
+
 ### Repo-Ready Example
 
 #### `config/settings.py`
