@@ -601,6 +601,22 @@ pip install pytest-xdist
 pytest -n auto
 ```
 
+### Visual Worker Distribution Example
+```text
+Tests:        test_a   test_b   test_c   test_d   test_e   test_f
+
+Worker 1:     test_a ------------------------> test_d
+Worker 2:     test_b ---------> test_e
+Worker 3:     test_c ----------> test_f
+```
+
+### How to read this
+- pytest-xdist creates multiple worker processes
+- workers pick up tests as they become available
+- faster workers can grab more tests
+- the split is usually load-balanced, not fixed
+- exact assignment can change run to run
+
 ### Playwright + pytest-xdist Example `conftest.py`
 ```python
 import pytest
