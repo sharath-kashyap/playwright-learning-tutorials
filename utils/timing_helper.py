@@ -221,7 +221,7 @@ def write_csv_report(records: List[TestMetrics], path: str = "timing_report.csv"
         "page_error_count",
     ]
 
-    with open(path, "w", newline="") as f:
+    with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for rec in records:

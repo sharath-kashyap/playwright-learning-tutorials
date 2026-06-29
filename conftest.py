@@ -80,6 +80,8 @@ def timed_browser(playwright_instance):
     collector and copied to each test's metrics when a context is created.
     """
     t0 = time.monotonic()
+    # headless=True is used here so the shared fixture works in CI without a
+    # display server.  Change to headless=False for local debugging.
     browser = playwright_instance.chromium.launch(headless=True)
     _collector._browser_launch_ms = round((time.monotonic() - t0) * 1000, 2)
 
