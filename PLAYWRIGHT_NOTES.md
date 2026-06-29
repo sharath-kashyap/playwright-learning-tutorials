@@ -595,6 +595,45 @@ Playwright scales best when tests are isolated, browser contexts are created per
 - Are traces/videos limited to failures?
 - Is the environment the real bottleneck?
 
+### Pytest-xdist Example
+```bash
+pip install pytest-xdist
+pytest -n auto
+```
+
+### Playwright + pytest-xdist Example `conftest.py`
+```python
+import pytest
+from playwright.sync_api import sync_playwright
+
+
+@pytest.fixture(scope="session")
+def playwright_instance():
+    with sync_playwright() as p:
+        yield p
+
+
+@pytest.fixture(scope="session")
+def browser(playwright_instance):
+    browser = playwright_instance.chromium.launch(headless=True)
+    yield browser
+    browser.close()
+
+
+@pytest.fixture(scope="function")
+def context(browser):
+    context = browser.new_context()
+    yield context
+    context.close()
+
+
+@pytest.fixture(scope="function")
+def page(context):
+    page = context.new_page()
+    yield page
+    page.close()
+```
+
 ### Ready-to-Say Answer
 Playwright performance improves when you reuse browser state smartly, keep tests independent, use parallel workers, and avoid unnecessary UI setup and hard waits.
 
