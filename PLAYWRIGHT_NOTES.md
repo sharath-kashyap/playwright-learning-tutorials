@@ -12,6 +12,7 @@ This repository contains Playwright learning notes.
 - Authentication
 - Debugging
 - CI/CD
+- Scaling and Performance
 
 ## Playwright Architecture
 
@@ -141,6 +142,116 @@ with sync_playwright() as p:
 - actions are executed on the page
 - cleanup closes page, context, and browser
 
+## Playwright Fixtures in Python
+
+Fixtures help manage setup and teardown cleanly in pytest-based Playwright frameworks.
+
+### Built-in Fixture Example
+```python
+def test_homepage(page):
+    page.goto("https://example.com")
+    assert "Example" in page.title()
+```
+
+### Custom Fixture Example
+```python
+import pytest
+from playwright.sync_api import sync_playwright
+
+@pytest.fixture
+def page_fixture():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False)
+        context = browser.new_context()
+        page = context.new_page()
+
+        yield page
+
+        page.close()
+        context.close()
+        browser.close()
+```
+
+### Recommended Scoped Fixtures
+```python
+import pytest
+from playwright.sync_api import sync_playwright
+
+@pytest.fixture(scope="session")
+def playwright_instance():
+    with sync_playwright() as p:
+        yield p
+
+@pytest.fixture(scope="session")
+def browser(playwright_instance):
+    browser = playwright_instance.chromium.launch(headless=False)
+    yield browser
+    browser.close()
+
+@pytest.fixture(scope="function")
+def context(browser):
+    context = browser.new_context()
+    yield context
+    context.close()
+
+@pytest.fixture(scope="function")
+def page(context):
+    page = context.new_page()
+    yield page
+    page.close()
+```
+
+### Fixture Notes
+- Code before `yield` is setup
+- Code after `yield` is teardown
+- Common scopes are `function`, `class`, `module`, and `session`
+- A good practice is browser at `session` scope and context/page at `function` scope
+
+## Scaling and Performance in Playwright
+
+Playwright scales mainly through worker-based parallelism, browser reuse, isolated browser contexts, and CI distribution.
+
+### How Scaling Works
+- **Parallel workers**: Test files run in separate worker processes
+- **Context isolation**: Fresh contexts isolate tests without paying the cost of relaunching the browser every time
+- **Projects**: Multi-browser and multi-device runs improve coverage but increase total execution count
+- **Sharding**: Large suites can be split across multiple CI machines
+
+### What Improves Performance
+- Reusing login/authentication with storage state
+- Using API-based setup instead of repeated UI setup flows
+- Keeping tests independent for safe parallelism
+- Limiting screenshots, videos, and traces to failures or retries
+- Using stable locators and avoiding unnecessary waits
+- Minimizing full browser relaunches
+
+### What Hurts Performance
+- `wait_for_timeout()`
+- Repeated UI login in every test
+- Shared mutable test data between tests
+- Very long end-to-end flows for simple validations
+- Excessive artifact capture for all passing tests
+- Relaunching browsers too frequently
+
+### Scaled Execution Flow
+1. CI starts multiple workers
+2. Each worker launches or connects to a browser
+3. Each test gets a fresh browser context
+4. Test runs in isolation
+5. Context closes after the test
+6. Results are merged into reports
+
+### Performance Tuning Mindset
+When a suite is slow, review these layers:
+- test design
+- framework configuration
+- CI machine capacity
+- backend or environment bottlenecks
+- application rendering and loading behavior
+
+### Interview Summary
+Playwright scales through parallel workers and isolated browser contexts. Performance improves through browser reuse, storage state, API-driven setup, and CI sharding. Most slowdowns usually come from poor test design, shared state, excessive artifacts, or infrastructure bottlenecks.
+
 ## Playwright vs Selenium Architecture
 
 Architecturally, Playwright is more modern, tightly integrated, and isolation-first, while Selenium is more protocol-driven, distributed, and browser-driver based.
@@ -249,7 +360,7 @@ There are more layers involved in Selenium execution.
 | Parallel testing | Lightweight and efficient | Heavier session model |
 
 ### Summary
-Playwright is designed as a modern automation framework with direct browser control, lightweight isolation, and many built-in testing features. Selenium is built around the WebDriver standard and browser drivers, making it highly flexible and widely supported, but often requiring more setup and more manual handling.
+Playwright is designed as a modern automation framework with direct browser control, lightweight isolation, and many built-in testing features. Selenium is built around the WebDriver standard and provides broad ecosystem support, but usually requires more setup and manual control.
 
 ## Update Process
 This file will be updated incrementally with additional Playwright details over time.
