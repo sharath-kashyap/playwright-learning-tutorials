@@ -8,10 +8,12 @@ A polished interview-prep guide for Playwright with concise explanations, practi
 - 3. Browser vs Context vs Page
 - 4. Playwright Lifecycle in Python
 - 5. Fixtures in Python
-- 6. Scaling and Performance
-- 7. Playwright vs Selenium
-- 8. Rapid-Fire Interview Questions
-- 9. Strong Answer Patterns
+- 6. Reusing Login Across Multiple Tests
+- 7. Repo-Ready Folder Structure
+- 8. Scaling and Performance
+- 9. Playwright vs Selenium
+- 10. Rapid-Fire Interview Questions
+- 11. Strong Answer Patterns
 
 ## 1. Quick Interview Summary
 
@@ -218,6 +220,39 @@ def page(context):
     page.close()
 ```
 
+### How test cases get the `page` instance
+This is the key idea in pytest fixtures.
+
+When a test is written like this:
+
+```python
+def test_dashboard(page):
+    page.goto("https://app.example.com/dashboard")
+```
+
+pytest sees that the test needs a fixture named `page`. It looks for the `page` fixture definition, runs it, and injects the yielded object into the test function.
+
+That means this fixture:
+
+```python
+@pytest.fixture(scope="function")
+def page(context):
+    page = context.new_page()
+    yield page
+    page.close()
+```
+
+creates the Playwright page object and passes it into the test automatically.
+
+Flow:
+1. pytest starts the test
+2. pytest sees `page` in the test arguments
+3. pytest resolves the dependency on `context`
+4. the `context` fixture creates a browser context
+5. the `page` fixture creates `context.new_page()`
+6. pytest injects that page object into the test
+7. after the test, teardown runs in reverse order
+
 ### Fixture Notes
 - Code before `yield` is setup
 - Code after `yield` is teardown
@@ -227,7 +262,237 @@ def page(context):
 ### Ready-to-Say Answer
 In Playwright Python with pytest, fixtures help manage browser, context, and page setup and teardown. They improve reusability, readability, and test isolation.
 
-## 6. Scaling and Performance
+## 6. Reusing Login Across Multiple Tests
+
+### Goal
+Avoid logging in through the UI in every test. Login once, save the authenticated browser state, and reuse it in all tests.
+
+### Framework-Level Idea
+- create auth state once
+- save cookies and local storage into a file
+- create a new context per test using that saved auth state
+- create a new page from that context
+
+### Repo-Ready Example
+
+#### `config/settings.py`
+```python
+BASE_URL = "https://app.example.com"
+AUTH_STATE_DIR = "playwright_framework/.auth"
+USERNAME = "testuser"
+PASSWORD = "secret123"
+```
+
+#### `pages/login_page.py`
+```python
+class LoginPage:
+    def __init__(self, page):
+        self.page = page
+
+    def open(self, base_url):
+        self.page.goto(f"{base_url}/login")
+
+    def login(self, username, password):
+        self.page.fill("#username", username)
+        self.page.fill("#password", password)
+        self.page.click("button[type='submit']")
+
+    def wait_for_login_success(self):
+        self.page.wait_for_url("**/dashboard")
+```
+
+#### `utils/auth_manager.py`
+```python
+from pathlib import Path
+from playwright.sync_api import sync_playwright
+from config.settings import BASE_URL, AUTH_STATE_DIR, USERNAME, PASSWORD
+from pages.login_page import LoginPage
+
+AUTH_FILE = Path(AUTH_STATE_DIR) / "user.json"
+
+
+def create_auth_state():
+    AUTH_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        page = context.new_page()
+
+        login_page = LoginPage(page)
+        login_page.open(BASE_URL)
+        login_page.login(USERNAME, PASSWORD)
+        login_page.wait_for_login_success()
+
+        context.storage_state(path=str(AUTH_FILE))
+        browser.close()
+
+
+def ensure_auth_state():
+    if not AUTH_FILE.exists():
+        create_auth_state()
+
+    return str(AUTH_FILE)
+```
+
+#### `conftest.py`
+```python
+import pytest
+from playwright.sync_api import sync_playwright
+from utils.auth_manager import ensure_auth_state
+
+
+@pytest.fixture(scope="session")
+def playwright_instance():
+    with sync_playwright() as p:
+        yield p
+
+
+@pytest.fixture(scope="session")
+def browser(playwright_instance):
+    browser = playwright_instance.chromium.launch(headless=True)
+    yield browser
+    browser.close()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_auth_state():
+    ensure_auth_state()
+
+
+@pytest.fixture(scope="function")
+def context(browser):
+    auth_file = ensure_auth_state()
+    context = browser.new_context(storage_state=auth_file)
+    yield context
+    context.close()
+
+
+@pytest.fixture(scope="function")
+def page(context):
+    page = context.new_page()
+    yield page
+    page.close()
+```
+
+#### `tests/test_dashboard.py`
+```python
+from config.settings import BASE_URL
+
+
+def test_dashboard_header(page):
+    page.goto(f"{BASE_URL}/dashboard")
+    assert page.locator("h1").is_visible()
+
+
+def test_recent_activity_widget(page):
+    page.goto(f"{BASE_URL}/dashboard")
+    assert page.locator("#recent-activity").is_visible()
+```
+
+#### `tests/test_profile.py`
+```python
+from config.settings import BASE_URL
+
+
+def test_profile_page(page):
+    page.goto(f"{BASE_URL}/profile")
+    assert page.locator("text=Profile").is_visible()
+
+
+def test_edit_profile_button(page):
+    page.goto(f"{BASE_URL}/profile")
+    assert page.locator("button:has-text('Edit')").is_visible()
+```
+
+### How the page is available in logged-in tests
+The page still comes from the `page` fixture. The only difference is that the `context` fixture now uses:
+
+```python
+browser.new_context(storage_state=auth_file)
+```
+
+So the flow becomes:
+1. ensure auth file exists
+2. create a browser context with saved login state
+3. create a page from that context
+4. inject that page into the test
+
+The test still just asks for `page`:
+
+```python
+def test_profile_page(page):
+    page.goto("https://app.example.com/profile")
+```
+
+but that page is now already authenticated because its context was created from the saved storage state.
+
+### Why this pattern works well
+- login UI runs once instead of for every test
+- tests remain isolated because each test gets a fresh context
+- execution becomes faster and more stable
+- framework stays clean and reusable
+
+### Ready-to-Say Answer
+To avoid repeated logins, I create storage state once, then every test gets a fresh browser context initialized with that saved state. The `page` object is still provided by a fixture, but it comes from an already authenticated context.
+
+## 7. Repo-Ready Folder Structure
+
+```text
+playwright_framework/
+│
+├── .auth/
+│   └── user.json
+│
+├── config/
+│   └── settings.py
+│
+├── pages/
+│   └── login_page.py
+│
+├── tests/
+│   ├── test_dashboard.py
+│   └── test_profile.py
+│
+├── utils/
+│   └── auth_manager.py
+│
+└── conftest.py
+```
+
+### Optional expansion for larger frameworks
+```text
+playwright_framework/
+│
+├── .auth/
+├── config/
+│   ├── settings.py
+│   └── environments.py
+│
+├── pages/
+│   ├── login_page.py
+│   ├── dashboard_page.py
+│   └── profile_page.py
+│
+├── fixtures/
+│   └── browser_fixtures.py
+│
+├── test_data/
+│   └── users.py
+│
+├── utils/
+│   ├── auth_manager.py
+│   └── helpers.py
+│
+├── tests/
+│   ├── smoke/
+│   ├── regression/
+│   └── api/
+│
+└── conftest.py
+```
+
+## 8. Scaling and Performance
 
 ### Interview Answer
 Playwright scales through worker-based parallelism, isolated browser contexts, browser reuse, and CI sharding.
@@ -273,7 +538,7 @@ Playwright scales through worker-based parallelism, isolated browser contexts, b
 ### Ready-to-Say Answer
 Playwright performance improves when you reuse browser state smartly, keep tests independent, use parallel workers, and avoid unnecessary UI setup and hard waits.
 
-## 7. Playwright vs Selenium
+## 9. Playwright vs Selenium
 
 ### Interview Answer
 Playwright is more modern, isolation-first, and tightly integrated, while Selenium is WebDriver-based and more ecosystem-driven.
@@ -306,7 +571,7 @@ Playwright is more modern, isolation-first, and tightly integrated, while Seleni
 ### Ready-to-Say Answer
 Playwright gives faster setup, lightweight isolation, and more built-in testing features, while Selenium offers broader historical ecosystem support and standard WebDriver-based automation.
 
-## 8. Rapid-Fire Interview Questions
+## 10. Rapid-Fire Interview Questions
 
 ### Architecture
 1. What is Playwright architecture?
@@ -324,21 +589,22 @@ Playwright gives faster setup, lightweight isolation, and more built-in testing 
 9. What is a fixture in pytest?
 10. What does `yield` do in a fixture?
 11. Why keep page and context at function scope?
-12. Why keep browser at session scope?
+12. How does pytest inject the `page` object into the test?
 
 ### Performance
 13. How does Playwright support parallel execution?
 14. What is sharding?
 15. What slows down Playwright suites the most?
 16. Why is `wait_for_timeout()` discouraged?
+17. How do you avoid repeated login in Playwright?
 
 ### Comparison
-17. What is the main difference between Playwright and Selenium?
-18. Why is Playwright isolation lighter than Selenium?
-19. What built-in features make Playwright attractive?
-20. When might teams still use Selenium?
+18. What is the main difference between Playwright and Selenium?
+19. Why is Playwright isolation lighter than Selenium?
+20. What built-in features make Playwright attractive?
+21. When might teams still use Selenium?
 
-## 9. Strong Answer Patterns
+## 11. Strong Answer Patterns
 
 Use these patterns in interviews:
 
