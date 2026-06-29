@@ -2,3 +2,5 @@
 __pycache__/
 .pytest_cache/
 *.pyc
+timing_report.json
+timing_report.csv
