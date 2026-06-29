@@ -617,6 +617,53 @@ Worker 3:     test_c ----------> test_f
 - the split is usually load-balanced, not fixed
 - exact assignment can change run to run
 
+### Configuring Multiple pytest Options
+Pytest supports multiple options at the same time, and they can be configured in a few different places depending on whether you want defaults or temporary overrides.
+
+#### 1. `pytest.ini`
+Use this for project-wide defaults.
+
+```ini
+[pytest]
+addopts = -n auto -v --tb=short --maxfail=2
+testpaths = tests
+python_files = test_*.py
+markers =
+    smoke: smoke tests
+    regression: regression tests
+```
+
+#### 2. `pyproject.toml`
+If the project uses `pyproject.toml`, pytest options can also be configured there.
+
+```toml
+[tool.pytest.ini_options]
+addopts = "-n auto -v --tb=short --maxfail=2"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+markers = [
+  "smoke: smoke tests",
+  "regression: regression tests",
+]
+```
+
+#### 3. Command-line arguments
+For one-off runs, pass options directly when running pytest.
+
+```bash
+pytest tests -n 4 -v --tb=short --maxfail=2 -m smoke
+```
+
+#### Example Breakdown
+- `-n 4` runs tests across 4 workers
+- `-v` enables verbose output
+- `--tb=short` shortens traceback output
+- `--maxfail=2` stops after 2 failures
+- `-m smoke` runs only tests marked as smoke
+
+#### Ready-to-Say Answer
+Pytest options can be configured in `pytest.ini`, `pyproject.toml`, or directly on the command line. I usually keep shared defaults in a config file and use command-line arguments for temporary overrides.
+
 ### Playwright + pytest-xdist Example `conftest.py`
 ```python
 import pytest
