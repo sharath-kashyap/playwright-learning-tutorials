@@ -159,7 +159,7 @@ with sync_playwright() as p:
 - cleanup closes page, context, and browser
 
 ### Interview Explanation
-Initialization usually starts with `sync_playwright()` or `async_playwright()`, then the browser is launched, a context is created, and a page is opened. After test completion, page, context, and browser are closed for proper cleanup and isolation.
+Initialization usually starts with `sync_playwright()` or `async_playwright()`, then the browser is launched, a context is created, and a page is opened. After test completion, page, context, and browser are closed to release resources and keep runs isolated.
 
 ## 5. Fixtures in Python
 
@@ -434,7 +434,7 @@ but that page is now already authenticated because its context was created from 
 - framework stays clean and reusable
 
 ### Ready-to-Say Answer
-To avoid repeated logins, I create storage state once, then every test gets a fresh browser context initialized with that saved state. The `page` object is still provided by a fixture, but it comes from an already authenticated context.
+To avoid repeated logins, I create storage state once, then every test gets a fresh browser context initialized with that saved state. The `page` object is still provided by a fixture, but it comes from an authenticated context, so tests stay isolated and faster.
 
 ## 7. Repo-Ready Folder Structure
 
@@ -496,6 +496,9 @@ playwright_framework/
 
 ### Interview Answer
 Playwright scales through worker-based parallelism, isolated browser contexts, browser reuse, and CI sharding.
+
+### Short Interview Version
+Playwright scales best when tests are isolated, browser contexts are created per test, and authentication state is reused instead of logging in through the UI every time. For large suites, I run tests in parallel, shard them across CI workers, and keep artifacts like traces and videos focused on failures to reduce overhead.
 
 ### How Scaling Works
 - **Parallel workers**: Test files run in separate worker processes
