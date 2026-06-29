@@ -1,23 +1,22 @@
 
 import pytest
-from playwright.sync_api import sync_playwright
 
-@pytest.fixture
-def page_fixture():
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        context = browser.new_context()
-        page = context.new_page()
-        yield page
+# timed_page is provided by conftest.py and records:
+#   - browser launch time
+#   - context / page creation time
+#   - page.goto() navigation time
+#   - network request / response timings
+#   - console errors and page errors
+#
+# A terminal summary table plus JSON and CSV reports are written automatically
+# at the end of the session by the hooks in conftest.py.
 
-        page.close()
-        context.close()
-        browser.close()
 
-def test_example(page_fixture):
-    page_fixture.goto("https://www.google.com")
-    print(page_fixture.title())
-    assert "Google" in page_fixture.title()
+def test_example(timed_page):
+    timed_page.goto("https://www.google.com")
+    print(timed_page.title())
+    assert "Google" in timed_page.title()
+
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-s"]))

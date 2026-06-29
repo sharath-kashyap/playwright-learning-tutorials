@@ -792,6 +792,116 @@ UI tests can capture many different kinds of metrics beyond network events.
 #### Ready-to-Say Answer
 To diagnose test performance, I measure timing in layers: pytest timing for setup/call/teardown, Playwright timing for browser and page actions, and network timing for API and resource latency. That lets me tell whether the slowdown came from infrastructure, the app, or the network.
 
+### Timing Helper Script
+
+#### Where it lives
+```
+utils/timing_helper.py   ← core metrics module
+conftest.py              ← pytest hooks and timed fixtures (root level)
+test_timing_demo.py      ← standalone demo test
+```
+
+#### What it captures
+
+| Metric | Source |
+|---|---|
+| `setup_ms` | pytest `pytest_runtest_logreport` hook |
+| `call_ms` | pytest `pytest_runtest_logreport` hook |
+| `teardown_ms` | pytest `pytest_runtest_logreport` hook |
+| `total_ms` | sum of setup + call + teardown |
+| `browser_launch_ms` | timed before/after `playwright.chromium.launch()` |
+| `context_create_ms` | timed before/after `browser.new_context()` |
+| `context_close_ms` | timed before/after `context.close()` |
+| `page_create_ms` | timed before/after `context.new_page()` |
+| `page_close_ms` | timed before/after `page.close()` |
+| `page_goto_ms` | wrapped `page.goto()` in the fixture |
+| `network_requests` | `page.on("request")` and `page.on("response")` events |
+| `console_errors` | `page.on("console")` – type `error` only |
+| `page_errors` | `page.on("pageerror")` – uncaught JS exceptions |
+
+#### How to use it
+
+Use the `timed_page` fixture in any test.  No other changes are needed.
+
+```python
+def test_homepage(timed_page):
+    timed_page.goto("https://example.com")
+    assert "Example Domain" in timed_page.title()
+```
+
+The fixture is defined in `conftest.py` and automatically:
+- times browser launch, context creation, page creation, and page.goto()
+- attaches network and error listeners to the page
+- records page close time during teardown
+
+#### Reporting
+
+Three outputs are produced automatically at the end of every pytest session:
+
+**Terminal summary** (printed inline)
+```text
+============================================================
+Playwright Timing Summary
+============================================================
+
+test_timing_demo.py::test_homepage_timing
+  setup_ms:           312.54
+  call_ms:            1204.77
+  teardown_ms:         88.21
+  total_ms:           1605.52
+  browser_launch_ms:   298.10
+  context_create_ms:    10.34
+  page_create_ms:        5.67
+  page_goto_ms:        843.22
+  network_requests:     12
+============================================================
+```
+
+**JSON** (`timing_report.json`)
+```json
+{
+  "test_timing_demo.py::test_homepage_timing": {
+    "setup_ms": 312.54,
+    "call_ms": 1204.77,
+    "teardown_ms": 88.21,
+    "total_ms": 1605.52,
+    "browser_launch_ms": 298.10,
+    "context_create_ms": 10.34,
+    "page_create_ms": 5.67,
+    "page_goto_ms": 843.22,
+    "network_requests": [
+      { "url": "https://example.com/", "method": "GET", "status": 200, "duration_ms": 320.5 }
+    ],
+    "console_errors": [],
+    "page_errors": []
+  }
+}
+```
+
+**CSV** (`timing_report.csv`)
+```csv
+test_name,setup_ms,call_ms,teardown_ms,total_ms,browser_launch_ms,context_create_ms,page_create_ms,page_goto_ms,network_request_count,console_error_count,page_error_count
+test_timing_demo.py::test_homepage_timing,312.54,1204.77,88.21,1605.52,298.10,10.34,5.67,843.22,12,0,0
+```
+
+The JSON and CSV files are excluded from version control via `.gitignore`.
+
+#### How to interpret the results
+
+| Symptom | Likely cause |
+|---|---|
+| High `browser_launch_ms` | Infrastructure or environment slowness |
+| High `context_create_ms` or `page_create_ms` | Playwright overhead, possibly too many contexts |
+| High `page_goto_ms` | Network latency or slow backend |
+| High `call_ms` relative to `page_goto_ms` | Slow frontend rendering or flaky waits |
+| High `setup_ms` or `teardown_ms` | Expensive fixture setup (e.g. auth state, DB seeding) |
+| Many `console_errors` or `page_errors` | Frontend JS exceptions in the app under test |
+
+#### Running the demo
+```bash
+pytest test_timing_demo.py -v -s
+```
+
 ### Playwright + pytest-xdist Example `conftest.py`
 ```python
 import pytest
